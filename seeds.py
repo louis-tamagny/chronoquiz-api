@@ -1,5 +1,5 @@
 from sqlmodel import Session, create_engine
-from models import Quizz, Question, Answer
+from models import Quizz, Question, Answer, User
 from config import sqlite_url
 
 engine = create_engine(sqlite_url)
@@ -27,4 +27,10 @@ answer_4 = Answer(content="1326", valid=False, question=question_1)
 
 with Session(engine) as session:
     session.add_all((answer_1, answer_2, answer_3, answer_4))
+    session.commit()
+
+user1 = User(username="bobby", email="bobby@mail.com", full_name="Bobby O'Connor", hashed_password='fakehashedsecret1')
+
+with Session(engine) as session:
+    session.add(user1)
     session.commit()

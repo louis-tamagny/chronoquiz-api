@@ -17,7 +17,17 @@ class AnswerBase(SQLModel):
     valid: bool = Field(default=False)
     question_id: int | None = Field(default=None, foreign_key="question.id")
 
+class UserBase(SQLModel):
+    username: str
+    email: str | None = None
+    full_name: str | None = None
+    disabled: bool | None = None
+
 # Models used for database manipulation
+
+class User(UserBase, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    hashed_password: str
 
 class Quizz(QuizzBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
