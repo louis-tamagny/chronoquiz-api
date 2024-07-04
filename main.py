@@ -1,4 +1,8 @@
 from fastapi import FastAPI, HTTPException, Depends
+from fastapi.security import OAuth2PasswordBearer
+
+from typing import Annotated
+
 from sqlmodel import create_engine, Session, select
 from models import *
 from config import sqlite_url
@@ -11,10 +15,10 @@ def get_session():
     with Session(engine) as session:
         yield session
 
-
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 @app.get("/quizzes/{quizz_id}", response_model=QuizzPublicWithQuestions)
-async def read_quizz(*, session: Session = Depends(get_session), quizz_id):
+async def read_quizz(*, session: Session = Depends(get_session), token: Annotated[str, Depends(oauth2_scheme)], quizz_id):
     return session.get(Quizz, quizz_id)
 
 @app.get("/quizzes", response_model=list[QuizzPublicWithQuestions])
