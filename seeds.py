@@ -1,6 +1,7 @@
 from sqlmodel import Session, create_engine
-from models import Quizz, Question, Answer
+from models.models import Quizz, Question, Answer, User, QuizzSession, QuizzSessionAnswers
 from config import sqlite_url
+from passlib.context import CryptContext
 
 engine = create_engine(sqlite_url)
 
@@ -27,4 +28,21 @@ answer_4 = Answer(content="1326", valid=False, question=question_1)
 
 with Session(engine) as session:
     session.add_all((answer_1, answer_2, answer_3, answer_4))
+    session.commit()
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+user_1 = User(username="bobby", email="bobby@mail.com", full_name="Bobby O'Connor", hashed_password=pwd_context.hash('fakehashedsecret1'))
+
+with Session(engine) as session:
+    session.add(user_1)
+    session.commit()
+
+session_1 = QuizzSession(user=user_1, quizz=quizz_1)
+
+with Session(engine) as session:
+    session.add(session_1)
+    session.commit()
+
+with Session(engine) as session:
+    session.add(QuizzSessionAnswers(quizz_session=session_1, answer=answer_1))
     session.commit()
