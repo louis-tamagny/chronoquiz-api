@@ -1,20 +1,31 @@
+from datetime import datetime, timedelta, timezone
+from typing import Annotated
+
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from typing import Annotated
 from sqlmodel import create_engine, Session, select
+from sqlalchemy.orm import selectinload, subqueryload
+from passlib.context import CryptContext
+import jwt
+from jwt.exceptions import InvalidTokenError
 import os
 from dotenv import load_dotenv
-from passlib.context import CryptContext
 
-from models import *
+from models.models import *
 from config import sqlite_url
 
 app = FastAPI()
 load_dotenv()
 
 engine = create_engine(sqlite_url, echo=True)
+
+def get_session():
+    with Session(engine) as session:
+        yield session
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
@@ -22,12 +33,62 @@ def verify_password(plain_password, hashed_password):
 def get_password_hash(password):
     return pwd_context.hash(password)
 
-
-def get_session():
+def get_user(username: str):
     with Session(engine) as session:
-        yield session
+        user = session.exec(select(User)
+                            .where(User.username == username)
+                            .options(selectinload(User.quizz_sessions).selectinload(QuizzSession.quizz), selectinload(User.quizz_sessions).selectinload(QuizzSession.answers).selectinload(QuizzSessionAnswers.answer))).first()
+        return user
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+def authenticate_user(username: str, password: str):
+    user = get_user(username)
+    if not user:
+        return False
+    if not verify_password(password, user.hashed_password):
+        return False
+    return user
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, os.environ["SECRET_KEY"], algorithm=os.environ["ALGORITHM"])
+    return encoded_jwt
+
+async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        print(token)
+        payload = jwt.decode(token, os.environ["SECRET_KEY"], algorithms=[os.environ["ALGORITHM"]])
+        print(payload)
+        username: str = payload.get("sub")
+        print(username)
+        if username is None:
+            raise credentials_exception
+        token_data = TokenData(username=username)
+    except InvalidTokenError:
+        raise credentials_exception
+    user = get_user(username=token_data.username)
+    if user is None:
+        raise credentials_exception
+    return user
+
+async def get_current_active_user(
+    current_user: Annotated[User, Depends(get_current_user)],
+):
+    if current_user.disabled:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+
+# Paths
 
 @app.get("/quizzes/{quizz_id}", response_model=QuizzPublicWithQuestions)
 async def read_quizz(*, session: Session = Depends(get_session), token: Annotated[str, Depends(oauth2_scheme)], quizz_id):
@@ -63,41 +124,24 @@ async def create_answers(answers: list[Answer], question_id: int, session: Sessi
     session.refresh(q)
     return q
 
-def fake_decode_token(token):
-    return token
-
-async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], session: Session = Depends(get_session)):
-    user = session.exec(select(User).where(User.username == fake_decode_token(token))).first()
+@app.post("/token")
+async def login_for_access_token(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+) -> Token:
+    user = authenticate_user(form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
+            detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return user
+    access_token_expires = timedelta(minutes=int(os.environ["ACCESS_TOKEN_EXPIRE_MINUTES"]))
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    return Token(access_token=access_token, token_type="bearer")
 
-
-async def get_current_active_user(
-    current_user: Annotated[User, Depends(get_current_user)],
-):
-    if current_user.disabled:
-        raise HTTPException(status_code=400, detail="Inactive user")
+@app.get("/users/me", response_model=UserPublic)
+async def read_users_me(current_user: Annotated[User, Depends(get_current_active_user)]):
+    print(current_user, current_user.quizz_sessions)
     return current_user
-
-@app.get("/users/me")
-async def read_users_me(current_user: Annotated[User, Depends(get_current_user)]):
-    return current_user
-
-def fake_hash_password(password: str):
-    return "fakehashed" + password
-
-@app.post("/token")
-async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], session: Session = Depends(get_session)):
-    user = session.exec(select(User).where(User.username == form_data.username)).first()
-    if not user:
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
-    hashed_password = fake_hash_password(form_data.password)
-    if not hashed_password == user.hashed_password:
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
-
-    return {"access_token": user.username, "token_type": "bearer"}
