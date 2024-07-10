@@ -28,7 +28,7 @@ class QuizzSessionBase(SQLModel):
     quizz_id: int | None = Field(default=None, foreign_key="quizz.id")
     score: int = Field(default=0)
 
-class QuizzSessionAnswersBase(SQLModel):
+class QuizzSessionAnswerBase(SQLModel):
     quizz_session_id: int | None = Field(default=None, foreign_key="quizzsession.id")
     answer_id: int | None = Field(default=None, foreign_key="answer.id")
 
@@ -56,9 +56,9 @@ class QuizzSession(QuizzSessionBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
     user: User | None = Relationship(back_populates="quizz_sessions")
     quizz: Quizz | None = Relationship()
-    answers: list["QuizzSessionAnswers"] = Relationship(back_populates="quizz_session")
+    answers: list["QuizzSessionAnswer"] = Relationship(back_populates="quizz_session")
 
-class QuizzSessionAnswers(QuizzSessionAnswersBase, table=True):
+class QuizzSessionAnswer(QuizzSessionAnswerBase, table=True):
     id: int | None = Field(default=None, primary_key=True)
     quizz_session: QuizzSession | None = Relationship(back_populates="answers")
     answer: Answer | None = Relationship()
@@ -81,10 +81,14 @@ class QuizzPublic(QuizzBase):
 class QuizzPublicWithQuestions(QuizzPublic):
     questions: list[QuestionPublicWithAnswers] = []
 
+class QuizzSessionAnswerPublic(QuizzSessionAnswerBase):
+    id: int
+    answer: AnswerPublic
+
 class QuizzSessionPublic(QuizzSessionBase):
     id: int
     quizz: QuizzPublic
-    answers: list[AnswerPublic] = []
+    answers: list[QuizzSessionAnswer] = []
 
 class UserPublic(UserBase):
     id: int

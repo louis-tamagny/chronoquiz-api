@@ -1,5 +1,5 @@
 from sqlmodel import Session, create_engine
-from models.models import Quizz, Question, Answer, User, QuizzSession, QuizzSessionAnswers
+from models.models import Quizz, Question, Answer, User, QuizzSession, QuizzSessionAnswer
 from config import sqlite_url
 from passlib.context import CryptContext
 
@@ -44,5 +44,5 @@ with Session(engine) as session:
     session.commit()
 
 with Session(engine) as session:
-    session.add(QuizzSessionAnswers(quizz_session=session_1, answer=answer_1))
+    session.add(QuizzSessionAnswer(quizz_session=session_1, answer=answer_1))
     session.commit()
