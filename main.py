@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlmodel import create_engine, Session, select
-from sqlalchemy.orm import selectinload, subqueryload
+from sqlalchemy.orm import selectinload
 from passlib.context import CryptContext
 import jwt
 from jwt.exceptions import InvalidTokenError
@@ -37,7 +37,7 @@ def get_user(username: str):
     with Session(engine) as session:
         user = session.exec(select(User)
                             .where(User.username == username)
-                            .options(selectinload(User.quizz_sessions).selectinload(QuizzSession.quizz), selectinload(User.quizz_sessions).selectinload(QuizzSession.answers).selectinload(QuizzSessionAnswers.answer))).first()
+                            .options(selectinload(User.quizz_sessions).selectinload(QuizzSession.quizz), selectinload(User.quizz_sessions).selectinload(QuizzSession.answers).selectinload(QuizzSessionAnswer.answer))).first()
         return user
 
 def authenticate_user(username: str, password: str):
@@ -143,5 +143,4 @@ async def login_for_access_token(
 
 @app.get("/users/me", response_model=UserPublic)
 async def read_users_me(current_user: Annotated[User, Depends(get_current_active_user)]):
-    print(current_user, current_user.quizz_sessions)
     return current_user
